@@ -59,6 +59,34 @@ sudo systemctl enable --now kalshi-collector
 
 Configuration via `/opt/kalshi-collector/.env` — see [deploy/env.example](deploy/env.example).
 
+### Shipping a code change
+
+You never hand-edit files on the box. `.env`, `service-account.json` and `data/` are
+untracked and excluded from every sync, so deploys never touch your credentials or your
+data.
+
+**With a git remote (recommended):**
+
+```bash
+git push                                        # from your laptop
+ssh <vm> 'sudo /opt/kalshi-collector/deploy/update.sh'
+```
+
+**Without one:**
+
+```bash
+./deploy/push.sh opc@<vm-ip>                    # rsync + deploy in one step
+```
+
+`update.sh` pulls, installs deps, runs the self-test against the live APIs, and only then
+restarts. **If the self-test fails it leaves the running service untouched** rather than
+replacing a working collector with a broken one.
+
+It also **refuses to restart between HH:53 and HH:58**, because the ladder is perishable —
+a restart through `HH:56` costs that hour permanently. Settlements are durable and
+repopulate via the startup backfill, so nothing else is at risk. Override with `FORCE=1`
+if you must.
+
 ## Output
 
 `data/snapshots.csv` holds the **full ladder** (~188 buckets/hour), unfiltered.
