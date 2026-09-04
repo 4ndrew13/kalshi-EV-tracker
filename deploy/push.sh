@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run on YOUR LAPTOP when you have no git remote: rsync the code up and deploy.
-#   ./deploy/push.sh opc@<vm-ip>
+#   ./deploy/push.sh ubuntu@<vm-ip>
 set -euo pipefail
 HOST="${1:?usage: deploy/push.sh user@host}"
 APP=/opt/kalshi-collector

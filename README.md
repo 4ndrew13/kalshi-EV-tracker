@@ -75,7 +75,7 @@ ssh <vm> 'sudo /opt/kalshi-collector/deploy/update.sh'
 **Without one:**
 
 ```bash
-./deploy/push.sh opc@<vm-ip>                    # rsync + deploy in one step
+./deploy/push.sh ubuntu@<vm-ip>                    # rsync + deploy in one step
 ```
 
 `update.sh` pulls, installs deps, runs the self-test against the live APIs, and only then
