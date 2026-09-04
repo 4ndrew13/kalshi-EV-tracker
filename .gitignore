@@ -1,0 +1,15 @@
+# Credentials — NEVER commit
+service-account.json
+*.json.key
+.env
+secrets/
+
+# Data
+data/
+*.csv
+*.log
+
+__pycache__/
+*.pyc
+.venv/
+venv/

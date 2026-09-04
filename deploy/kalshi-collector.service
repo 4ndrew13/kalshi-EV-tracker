@@ -1,0 +1,35 @@
+[Unit]
+Description=Kalshi hourly BTC collector (measurement only, no trading)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kalshi
+Group=kalshi
+WorkingDirectory=/opt/kalshi-collector
+Environment=KALSHI_DATA_DIR=/opt/kalshi-collector/data
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/opt/kalshi-collector/.env
+ExecStart=/opt/kalshi-collector/.venv/bin/python -m kalshi_collector.main run
+
+# A crash at 3am self-heals in 30s instead of losing every hour until noticed.
+Restart=always
+RestartSec=30
+
+StandardOutput=journal
+StandardError=journal
+
+# This process holds no Kalshi credentials and must never be able to place an
+# order. Lock it down accordingly.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/kalshi-collector/data
+
+[Install]
+WantedBy=multi-user.target
