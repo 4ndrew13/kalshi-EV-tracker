@@ -14,9 +14,11 @@ if [[ "${FORCE:-0}" != "1" ]] && (( M >= 53 && M <= 58 )); then
 fi
 
 # Skip when deployed by rsync (deploy/push.sh) rather than git.
-if [[ "${SKIP_PULL:-0}" != "1" ]] && git -C "$APP" remote get-url origin >/dev/null 2>&1; then
+if [[ "${SKIP_PULL:-0}" != "1" ]] && sudo -u kalshi git -C "$APP" remote get-url origin >/dev/null 2>&1; then
   echo "==> pull"
-  git -C "$APP" pull --ff-only
+  # Run git as the repo owner; root on a kalshi-owned tree trips git's
+  # dubious-ownership guard, and the deploy key lives in /home/kalshi/.ssh.
+  sudo -u kalshi git -C "$APP" pull --ff-only
 else
   echo "==> no git remote; using files already in place"
 fi

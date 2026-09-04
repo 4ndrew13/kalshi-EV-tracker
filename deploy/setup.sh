@@ -26,6 +26,10 @@ sudo python3 -m venv "$APP/.venv"
 sudo "$APP/.venv/bin/pip" install -q --upgrade pip
 sudo "$APP/.venv/bin/pip" install -q -r "$APP/requirements.txt"
 
+echo "==> git ownership"
+sudo chown -R kalshi:kalshi "$APP"
+sudo -u kalshi git config --global --add safe.directory "$APP" 2>/dev/null || true
+
 echo "==> permissions"
 sudo chown -R kalshi:kalshi "$APP"
 [[ -f "$APP/service-account.json" ]] && sudo chmod 600 "$APP/service-account.json" || true
