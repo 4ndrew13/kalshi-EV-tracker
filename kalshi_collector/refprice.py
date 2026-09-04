@@ -16,8 +16,9 @@ a persistent basis would shift every ``move`` in the same direction. Averaging
 venues largely cancels it.
 """
 import logging
+import re
 import statistics
-from datetime import timedelta
+from datetime import datetime, timezone
 
 from .config import BITSTAMP_MAX_LOOKBACK_S
 from .http import get_json
@@ -32,16 +33,20 @@ BS_TICKER = "https://www.bitstamp.net/api/v2/ticker/btcusd/"
 BS_TRADES = "https://www.bitstamp.net/api/v2/transactions/btcusd/"
 
 
+_ISO = re.compile(
+    r"^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?")
+
+
 def _iso_to_epoch(s):
-    from datetime import datetime, timezone
-    s = s.replace("Z", "+00:00")
-    if "." in s:
-        head, tail = s.split(".", 1)
-        frac = "".join(c for c in tail if c.isdigit())[:6]
-        off = tail[len(frac):] if not tail[len(frac):].startswith("+") else tail[len(frac):]
-        s = f"{head}.{frac or '0'}{off if off else '+00:00'}"
-    return datetime.fromisoformat(s).replace(tzinfo=timezone.utc).timestamp() \
-        if datetime.fromisoformat(s).tzinfo is None else datetime.fromisoformat(s).timestamp()
+    """Coinbase timestamps are UTC with variable-length fractional seconds
+    ('...T23:43:45.935000Z'). Python 3.8's fromisoformat rejects several of the
+    shapes seen in the wild, so parse explicitly rather than patching strings."""
+    m = _ISO.match(s.strip())
+    if not m:
+        raise ValueError(f"unparseable timestamp: {s!r}")
+    y, mo, d, h, mi, sec = (int(m.group(i)) for i in range(1, 7))
+    micro = int(((m.group(7) or "") + "000000")[:6])
+    return datetime(y, mo, d, h, mi, sec, micro, tzinfo=timezone.utc).timestamp()
 
 
 # --------------------------------------------------------------------------
@@ -171,12 +176,7 @@ def reconstruct_close(close_utc):
     """Composite over [close-60s, close). Returns a dict of diagnostic fields."""
     end_ts = close_utc.timestamp()
     start_ts = end_ts - 60
-    age = None
-    try:
-        from datetime import datetime, timezone
-        age = datetime.now(timezone.utc).timestamp() - end_ts
-    except Exception:
-        pass
+    age = datetime.now(timezone.utc).timestamp() - end_ts
 
     fetchers = {"coinbase": _trades_coinbase, "kraken": _trades_kraken,
                 "bitstamp": _trades_bitstamp}
