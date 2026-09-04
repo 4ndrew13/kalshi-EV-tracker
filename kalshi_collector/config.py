@@ -1,7 +1,10 @@
 """Central configuration. Verified against the live API 2026-09-04 (see STEP0-FINDINGS.md)."""
 import os
 from pathlib import Path
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo          # Python 3.9+
+except ImportError:                        # Ubuntu 20.04 ships Python 3.8
+    from backports.zoneinfo import ZoneInfo
 
 # --- Kalshi -----------------------------------------------------------------
 # Both hosts return byte-identical results; the second is a failover.
