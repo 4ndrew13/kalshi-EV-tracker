@@ -38,6 +38,9 @@ SHEET_COLS = [
     "settlement_value", "move", "result", "reconstruction_ok",
 ]
 
+# Written by the backfill sweep, not the snapshot.
+SETTLEMENT_FIELDS = ["settlement_value", "move", "result", "reconstruction_ok"]
+
 
 def _now():
     return datetime.now(timezone.utc)
@@ -189,6 +192,10 @@ def backfill(limit=48):
             store.log_run("backfill_no_expiration_value", et)
             continue
         store.append_settlements(rows)
+        # Mirror into the Sheet so the Calibration tab can join result to ask.
+        sheets.update_settlements(
+            p["capture_id"], {r["market_ticker"]: r for r in rows},
+            SHEET_COLS, SETTLEMENT_FIELDS)
         filled += 1
         log.info("backfilled %s: settlement=%s basis=%s venues=%s",
                  et, rows[0]["settlement_value"], rows[0]["basis"], rows[0]["basis_venues"])
@@ -197,6 +204,28 @@ def backfill(limit=48):
 
 
 # ---------------------------------------------------------------- scheduler
+def sheets_sync():
+    """One-off: push settlement values into Sheet rows that were appended before
+    the settlement half existed. Idempotent -- safe to re-run."""
+    import csv as _csv
+    from .config import SETTLEMENTS_CSV
+    if not SETTLEMENTS_CSV.exists():
+        log.info("no settlements.csv yet")
+        return 0
+    with open(SETTLEMENTS_CSV, newline="") as fh:
+        rows = list(_csv.DictReader(fh))
+    by_capture = {}
+    for r in rows:
+        by_capture.setdefault(r["capture_id"], {})[r["market_ticker"]] = r
+    total = 0
+    for cid, by_ticker in sorted(by_capture.items()):
+        n = sheets.update_settlements(cid, by_ticker, SHEET_COLS, SETTLEMENT_FIELDS)
+        log.info("synced %s -> %d sheet rows", cid, n)
+        total += n
+    store.log_run("sheets_sync", f"captures={len(by_capture)} rows_updated={total}")
+    return total
+
+
 def _next_mark(now):
     marks = []
     for minute, fn, name in ((SNAPSHOT_MINUTE, snapshot, "snapshot"),
@@ -232,7 +261,7 @@ def run_forever():
 def main():
     ap = argparse.ArgumentParser(description="Kalshi hourly BTC collector")
     ap.add_argument("command", nargs="?", default="run",
-                    choices=["run", "snapshot", "backfill", "selftest"])
+                    choices=["run", "snapshot", "backfill", "selftest", "sheets-sync"])
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
     logging.basicConfig(
@@ -245,6 +274,8 @@ def main():
         snapshot()
     elif a.command == "backfill":
         backfill()
+    elif a.command == "sheets-sync":
+        sheets_sync()
     elif a.command == "selftest":
         from .selftest import run as st
         sys.exit(0 if st() else 1)

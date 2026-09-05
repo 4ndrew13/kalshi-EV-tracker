@@ -19,6 +19,56 @@ def enabled():
     return bool(SHEETS_SPREADSHEET_ID)
 
 
+def _worksheet():
+    import gspread
+    from google.oauth2.service_account import Credentials
+    creds = Credentials.from_service_account_file(
+        SHEETS_CREDENTIALS, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+    sh = gspread.authorize(creds).open_by_key(SHEETS_SPREADSHEET_ID)
+    return sh.worksheet(SHEETS_WORKSHEET)
+
+
+def _col_letter(idx):
+    """0-based column index -> A1 letter."""
+    s, idx = "", idx + 1
+    while idx:
+        idx, r = divmod(idx - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def update_settlements(capture_id, by_ticker, cols, fields):
+    """Backfill the settlement columns of rows this capture already appended.
+
+    The Sheet is a VIEW, not the system of record, so updating cells in place is
+    safe here in a way it deliberately is not for the CSVs -- and without it the
+    Calibration tab can never join result to the ask it was paid at.
+
+    Non-fatal by design: settlements.csv already holds the truth.
+    """
+    if not enabled() or not by_ticker:
+        return 0
+    try:
+        ws = _worksheet()
+        first, last = cols.index(fields[0]), cols.index(fields[-1])
+        rng = lambda r: f"{_col_letter(first)}{r}:{_col_letter(last)}{r}"
+        ids = ws.col_values(cols.index("capture_id") + 1)
+        tks = ws.col_values(cols.index("market_ticker") + 1)
+        updates = []
+        for i, cid in enumerate(ids, start=1):
+            if cid != capture_id:
+                continue
+            row = by_ticker.get(tks[i - 1] if i - 1 < len(tks) else "")
+            if row:
+                updates.append({"range": rng(i), "values": [[row.get(f, "") for f in fields]]})
+        if updates:
+            ws.batch_update(updates, value_input_option="RAW")
+        return len(updates)
+    except Exception as exc:
+        log.warning("sheets settlement update failed (non-fatal, CSV has it): %s", exc)
+        return 0
+
+
 def append(rows, cols):
     """Batch every bucket into one values.append call. Returns rows written."""
     if not enabled() or not rows:
