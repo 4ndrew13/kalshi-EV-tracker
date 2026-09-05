@@ -24,8 +24,19 @@ from .store import SETTLEMENT_COLS, SNAPSHOT_COLS
 
 log = logging.getLogger("collector")
 
-# The Sheet mirrors the snapshot columns for live buckets only.
-SHEET_COLS = SNAPSHOT_COLS
+# The Sheet's "Data log" tab predates the schema changes in STEP0-FINDINGS, so
+# write its exact 23-column order rather than reshaping someone's spreadsheet.
+# Settlement columns stay blank: settlement is DURABLE (recoverable from Kalshi
+# forever), so the Sheet's job as offsite copy only has to protect the
+# perishable half -- the quote state, which nothing can reconstruct.
+SHEET_COLS = [
+    "capture_id", "close_utc", "close_et_hour", "minutes_to_close",
+    "event_ticker", "market_ticker", "floor_strike", "cap_strike",
+    "bucket_width", "yes_bid", "yes_ask", "last_price", "volume",
+    "open_interest", "ref_spot", "ref_source", "spot_offset_from_floor",
+    "ladder_ask_sum", "n_buckets",
+    "settlement_value", "move", "result", "reconstruction_ok",
+]
 
 
 def _now():
