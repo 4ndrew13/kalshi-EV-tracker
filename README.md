@@ -3,7 +3,7 @@
 A **measurement instrument, not a trading bot.** It places no orders and holds no Kalshi
 credentials. It serves to answer this hypothesis:
 
-**Hypothesis**
+**Hypothesis**:
 Hourly BTC range markets are priced off a point-settlement, thin-tailed, season-less model of a process that is actually 60-second-averaged, fat-tailed, and strongly time-of-day dependent — and the resulting calibration error is large enough, and structured enough, to survive paying the ask
 
 See [SPEC.md](SPEC.md) for the design and [STEP0-FINDINGS.md](STEP0-FINDINGS.md) for the
