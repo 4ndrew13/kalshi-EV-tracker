@@ -4,7 +4,7 @@ from pathlib import Path
 try:
     from zoneinfo import ZoneInfo          # Python 3.9+
 except ImportError:                        # Ubuntu 20.04 ships Python 3.8
-    from backports.zoneinfo import ZoneInfo
+    from backports.zoneinfo import ZoneInfo  # type: ignore[import-not-found]
 
 # --- Kalshi -----------------------------------------------------------------
 # Both hosts return byte-identical results; the second is a failover.
