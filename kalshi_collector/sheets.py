@@ -19,13 +19,22 @@ def enabled():
     return bool(SHEETS_SPREADSHEET_ID)
 
 
-def _worksheet():
+_WS = None
+
+
+def _worksheet(refresh=False):
+    """Cached. Each open_by_key + worksheet() pair costs two reads against a
+    60-reads-per-minute quota, so re-opening per call is what exhausted it."""
+    global _WS
+    if _WS is not None and not refresh:
+        return _WS
     import gspread
     from google.oauth2.service_account import Credentials
     creds = Credentials.from_service_account_file(
         SHEETS_CREDENTIALS, scopes=["https://www.googleapis.com/auth/spreadsheets"])
     sh = gspread.authorize(creds).open_by_key(SHEETS_SPREADSHEET_ID)
-    return sh.worksheet(SHEETS_WORKSHEET)
+    _WS = sh.worksheet(SHEETS_WORKSHEET)
+    return _WS
 
 
 def _col_letter(idx):
@@ -37,36 +46,45 @@ def _col_letter(idx):
     return s
 
 
-def update_settlements(capture_id, by_ticker, cols, fields):
-    """Backfill the settlement columns of rows this capture already appended.
+def update_settlements_bulk(by_capture, cols, fields):
+    """Fill settlement columns for many captures in ONE read and ONE write.
 
-    The Sheet is a VIEW, not the system of record, so updating cells in place is
-    safe here in a way it deliberately is not for the CSVs -- and without it the
-    Calibration tab can never join result to the ask it was paid at.
-
-    Non-fatal by design: settlements.csv already holds the truth.
+    The Sheet is a view and settlements.csv is the system of record, so editing
+    cells in place is safe here in a way it is not for the CSVs. Doing it per
+    capture cost four reads each and blew the 60/min read quota; this reads the
+    two key columns once and issues a single batch_update.
     """
-    if not enabled() or not by_ticker:
+    if not enabled() or not by_capture:
         return 0
     try:
         ws = _worksheet()
-        first, last = cols.index(fields[0]), cols.index(fields[-1])
-        rng = lambda r: f"{_col_letter(first)}{r}:{_col_letter(last)}{r}"
         ids = ws.col_values(cols.index("capture_id") + 1)
         tks = ws.col_values(cols.index("market_ticker") + 1)
+        first, last = cols.index(fields[0]), cols.index(fields[-1])
         updates = []
         for i, cid in enumerate(ids, start=1):
-            if cid != capture_id:
+            by_ticker = by_capture.get(cid)
+            if not by_ticker:
                 continue
             row = by_ticker.get(tks[i - 1] if i - 1 < len(tks) else "")
             if row:
-                updates.append({"range": rng(i), "values": [[row.get(f, "") for f in fields]]})
+                updates.append({
+                    "range": f"{_col_letter(first)}{i}:{_col_letter(last)}{i}",
+                    "values": [[row.get(f, "") for f in fields]],
+                })
         if updates:
             ws.batch_update(updates, value_input_option="RAW")
+        log.info("sheets: settlement-filled %d rows", len(updates))
         return len(updates)
     except Exception as exc:
-        log.warning("sheets settlement update failed (non-fatal, CSV has it): %s", exc)
+        log.warning("sheets settlement update failed (non-fatal, CSV has it): %s: %s",
+                    type(exc).__name__, exc)
         return 0
+
+
+def update_settlements(capture_id, by_ticker, cols, fields):
+    """Single-capture wrapper used by the hourly backfill sweep."""
+    return update_settlements_bulk({capture_id: by_ticker}, cols, fields)
 
 
 def append(rows, cols):

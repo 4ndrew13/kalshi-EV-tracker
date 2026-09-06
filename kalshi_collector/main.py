@@ -235,11 +235,7 @@ def sheets_sync():
         log.info("re-appending %s (%d live rows)", cid, len(live))
         sheets.append(live, SHEET_COLS)
 
-    total = 0
-    for cid, by_ticker in sorted(by_capture.items()):
-        n = sheets.update_settlements(cid, by_ticker, SHEET_COLS, SETTLEMENT_FIELDS)
-        log.info("synced %s -> %d sheet rows", cid, n)
-        total += n
+    total = sheets.update_settlements_bulk(by_capture, SHEET_COLS, SETTLEMENT_FIELDS)
     store.log_run("sheets_sync", f"captures={len(by_capture)} rows_updated={total}")
     return total
 
