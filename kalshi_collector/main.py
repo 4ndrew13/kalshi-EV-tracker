@@ -110,7 +110,9 @@ def snapshot(target_close=None):
 
     n = store.append_snapshots(rows)          # disk first, always
     live = [r for r in rows if r["is_live"]]
-    sheets.append(live, SHEET_COLS)            # then the Sheet, never fatal
+    wrote = sheets.append(live, SHEET_COLS)    # then the Sheet, never fatal
+    if sheets.enabled() and wrote != len(live):
+        log.warning("sheets wrote %d of %d live rows for %s", wrote, len(live), capture_id)
 
     store.log_run("snapshot_ok",
                   f"event={ladder[0]['event_ticker']} rows={n} live={len(live)} "
@@ -207,6 +209,7 @@ def backfill(limit=48):
 def sheets_sync():
     """One-off: push settlement values into Sheet rows that were appended before
     the settlement half existed. Idempotent -- safe to re-run."""
+    import collections
     import csv as _csv
     from .config import SETTLEMENTS_CSV
     if not SETTLEMENTS_CSV.exists():
@@ -217,6 +220,21 @@ def sheets_sync():
     by_capture = {}
     for r in rows:
         by_capture.setdefault(r["capture_id"], {})[r["market_ticker"]] = r
+    have = set(sheets.existing_capture_ids())
+    # Re-append any capture the Sheet never received, reading live buckets back
+    # out of the CSV that is the system of record.
+    import csv as _csv2
+    from .config import SNAPSHOTS_CSV
+    with open(SNAPSHOTS_CSV, newline="") as fh:
+        snaps = list(_csv2.DictReader(fh))
+    missing = collections.OrderedDict()
+    for r in snaps:
+        if r["capture_id"] not in have and r.get("is_live") == "1":
+            missing.setdefault(r["capture_id"], []).append(r)
+    for cid, live in missing.items():
+        log.info("re-appending %s (%d live rows)", cid, len(live))
+        sheets.append(live, SHEET_COLS)
+
     total = 0
     for cid, by_ticker in sorted(by_capture.items()):
         n = sheets.update_settlements(cid, by_ticker, SHEET_COLS, SETTLEMENT_FIELDS)
