@@ -118,12 +118,20 @@ def append(rows, cols):
         return 0
 
 
-def existing_capture_ids():
-    """capture_ids already present in the Sheet, for idempotent re-sync."""
+def existing_rows(cols):
+    """(capture_id, market_ticker) pairs already in the Sheet.
+
+    Keyed on the pair, not capture_id alone: a partially-written capture would
+    otherwise look present and never be repaired.
+    """
     if not enabled():
-        return []
+        return set()
     try:
-        return [v for v in _worksheet().col_values(1) if v.startswith("20")]
+        ws = _worksheet()
+        ids = ws.col_values(cols.index("capture_id") + 1)
+        tks = ws.col_values(cols.index("market_ticker") + 1)
+        return {(c, tks[i] if i < len(tks) else "")
+                for i, c in enumerate(ids) if c.startswith("20")}
     except Exception as exc:
         log.warning("sheets read failed: %s", exc)
-        return []
+        return set()
